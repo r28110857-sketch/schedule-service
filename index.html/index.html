@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Расписание</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 400px; margin: auto; }
+    select, button { width: 100%; padding: 10px; margin-top: 10px; font-size: 16px; }
+    #result { margin-top: 20px; padding: 15px; border: 1px solid #ccc; white-space: pre-wrap; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <h2>Расписание занятий</h2>
+  <label>Выберите группу:</label>
+  <select id="group-select"></select>
+
+  <button onclick="getToday()">📅 Расписание на сегодня (/today)</button>
+  <button onclick="getNow()">⏰ Какая пара сейчас (/now)</button>
+
+  <div id="result">Результат появится здесь...</div>
+
+  <script>
+    const SUPABASE_URL = 'ВСТАВЬТЕ_ВАШ_PROJECT_URL';
+    const SUPABASE_KEY = 'ВСТАВЬТЕ_ВАШ_ANON_KEY';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function loadGroups() {
+      const { data: groups } = await supabaseClient.from('groups').select('*');
+      const select = document.getElementById('group-select');
+      select.innerHTML = groups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+    }
+
+    async function getToday() {
+      const groupId = document.getElementById('group-select').value;
+      const todayIndex = new Date().getDay();
+      const dayOfWeek = todayIndex === 0 ? 7 : todayIndex;
+
+      const { data: schedule } = await supabaseClient
+        .from('schedule')
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('day_of_week', dayOfWeek)
+        .order('time_start', { ascending: true });
+
+      const resDiv = document.getElementById('result');
+      if (!schedule || schedule.length === 0) return resDiv.innerText = 'На сегодня пар нет! 🎉';
+
+      let text = '📅 Расписание на сегодня:\n\n';
+      schedule.forEach(s => {
+        text += `${s.lesson_number}. ${s.subject_name} (${s.time_start.slice(0,5)} - ${s.time_end.slice(0,5)})\n`;
+      });
+      resDiv.innerText = text;
+    }
+
+    async function getNow() {
+      const groupId = document.getElementById('group-select').value;
+      const now = new Date();
+      const todayIndex = now.getDay();
+      const dayOfWeek = todayIndex === 0 ? 7 : todayIndex;
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
+
+      const { data: schedule } = await supabaseClient
+        .from('schedule')
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('day_of_week', dayOfWeek)
+        .order('time_start', { ascending: true });
+
+      const resDiv = document.getElementById('result');
+      if (!schedule || schedule.length === 0) return resDiv.innerText = 'На сегодня пар нет.';
+
+      const current = schedule.find(s => currentTime >= s.time_start && currentTime <= s.time_end);
+      if (current) {
+        return resDiv.innerText = `Сейчас идет ${current.lesson_number} пара: ${current.subject_name} (${current.time_start.slice(0,5)} - ${current.time_end.slice(0,5)})`;
+      }
+
+      const next = schedule.find(s => currentTime < s.time_start);
+      if (next) {
+        return resDiv.innerText = `Сейчас перемена. Следующая пара в ${next.time_start.slice(0,5)}: ${next.subject_name}`;
+      }
+
+      resDiv.innerText = 'На сегодня все пары закончились!';
+    }
+
+    loadGroups();
+  </script>
+</body>
+</html>
